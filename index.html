@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>桌面角色簡版</title>
+
+  <!-- PWA 設定 -->
+  <meta name="theme-color" content="#0e1520" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="./icon.png" />
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="桌面角色">
+  <link rel="apple-touch-icon" href="./icon.png">
+
+  <style>
+    body {
+      margin: 0;
+      background: #0e1520;
+      color: #e5e7eb;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .character {
+      position: relative;
+      width: 100%;
+      max-width: 760px;
+      height: 520px;
+      margin-top: 20px;
+    }
+    .character img {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 360px;
+      width: auto;
+      object-fit: contain;
+      pointer-events: none;
+    }
+    .bubble {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      border-radius: 12px;
+      padding: 12px 16px;
+      width: min(90vw, 720px);
+      min-height: 44px;
+      text-align: center;
+    }
+    .chatbox {
+      margin-top: 14px;
+      display: flex;
+      gap: 6px;
+      width: 90%;
+      max-width: 720px;
+    }
+    .chatbox input {
+      flex: 1;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #1a1f2c;
+      color: #eee;
+      padding: 10px 12px;
+      font-size: 16px;
+    }
+    .chatbox button {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      background: #334155;
+      color: #eee;
+    }
+    .controls {
+      margin-top: 12px;
+      background: rgba(30,40,60,0.9);
+      border-radius: 12px;
+      padding: 14px;
+      width: 90%;
+      max-width: 720px;
+      margin-bottom: 100px;
+    }
+    .controls.hidden { display: none; }
+    .row { margin: 8px 0; }
+    .row label { display:block; font-size: 13px; margin-bottom: 4px; }
+    .row input, .row textarea, .row select {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #1a1f2c;
+      color: #eee;
+      padding: 8px 10px;
+    }
+    button {
+      margin-top: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      background: #334155;
+      color: #eee;
+    }
+    #toggleBtn {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      background: #475569;
+    }
+    @media (max-width: 520px){
+      .character { height: 400px; }
+      .character img { height: 240px; }
+      .bubble { font-size: 14px; padding: 10px; }
+      .chatbox input { font-size: 14px; }
+      .controls { font-size: 14px; padding: 10px; }
+    }
+    @supports (-webkit-touch-callout: none) {
+      .chatbox { margin-bottom: env(safe-area-inset-bottom); }
+    }
+  </style>
+</head>
+<body>
+  <div class="character">
+    <img id="charImg" src="./character.png" alt="角色頭像" />
+    <div class="bubble" id="bubble">你好，我是桌面角色。</div>
+  </div>
+
+  <div class="chatbox">
+    <input type="text" id="chatInput" placeholder="對角色說點什麼... (Enter送出)" />
+    <button id="chatSend">送出</button>
+  </div>
+
+  <div class="controls" id="controls">
+    <div class="row">
+      <label>角色名稱</label>
+      <input type="text" id="inputName" value="小惡魔" />
+    </div>
+    <div class="row">
+      <label>角色立繪路徑</label>
+      <input type="text" id="inputImg" value="./character.png" />
+    </div>
+    <div class="row">
+      <label>自動發話頻率（分鐘，0=關閉）</label>
+      <input type="number" id="inputInterval" value="10" />
+    </div>
+    <div class="row">
+      <label>人物設定（System Prompt/Persona）</label>
+      <textarea id="inputPersona" placeholder="在這裡寫長篇人設..." rows="6"></textarea>
+    </div>
+    <div class="row">
+      <label>API Base URL</label>
+      <input type="text" id="oaBase" value="https://api.openai.com/v1" />
+    </div>
+    <div class="row">
+      <label>Model</label>
+      <input type="text" id="oaModel" value="gpt-4o-mini" />
+    </div>
+    <div class="row">
+      <label>API Key</label>
+      <input type="text" id="oaKey" placeholder="sk-..." />
+    </div>
+    <button id="btnSave">儲存設定</button>
+    <button id="btnTest">測試發話</button>
+  </div>
+
+  <button id="toggleBtn">隱藏/顯示設定</button>
+
+  <script>
+    const bubble = document.getElementById('bubble');
+    const charImg = document.getElementById('charImg');
+    const controls = document.getElementById('controls');
+    const btnSave = document.getElementById('btnSave');
+    const btnTest = document.getElementById('btnTest');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const inputName = document.getElementById('inputName');
+    const inputImg = document.getElementById('inputImg');
+    const inputInterval = document.getElementById('inputInterval');
+    const inputPersona = document.getElementById('inputPersona');
+    const oaBase = document.getElementById('oaBase');
+    const oaModel = document.getElementById('oaModel');
+    const oaKey = document.getElementById('oaKey');
+    const chatInput = document.getElementById('chatInput');
+    const chatSend = document.getElementById('chatSend');
+
+    let timer = null;
+    let cfg = {};
+
+    function saveConfig(){
+      cfg = {
+        name: inputName.value.trim(),
+        img: inputImg.value.trim(),
+        interval: parseInt(inputInterval.value)||0,
+        persona: inputPersona.value.trim(),
+        oaBase: oaBase.value.trim(),
+        oaModel: oaModel.value.trim(),
+        oaKey: oaKey.value.trim()
+      };
+      localStorage.setItem('cfg', JSON.stringify(cfg));
+      charImg.src = cfg.img;
+      scheduleTimer();
+    }
+
+    function loadConfig(){
+      cfg = JSON.parse(localStorage.getItem('cfg')||'{}');
+      if(cfg.name) inputName.value = cfg.name;
+      if(cfg.img) { inputImg.value = cfg.img; charImg.src = cfg.img; }
+      if(cfg.interval) inputInterval.value = cfg.interval;
+      if(cfg.persona) inputPersona.value = cfg.persona;
+      if(cfg.oaBase) oaBase.value = cfg.oaBase;
+      if(cfg.oaModel) oaModel.value = cfg.oaModel;
+      if(cfg.oaKey) oaKey.value = cfg.oaKey;
+      scheduleTimer();
+    }
+
+    function scheduleTimer(){
+      if(timer) clearInterval(timer);
+      if(cfg.interval && cfg.interval>0){
+        timer = setInterval(()=>{
+          speak("（自動發話：來點隨機吐槽吧）");
+        }, cfg.interval*60000);
+      }
+    }
+
+    async function speak(text){
+      bubble.textContent = "思考中...";
+      try{
+        const res = await fetch(cfg.oaBase+"/chat/completions",{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.oaKey}`},
+          body:JSON.stringify({
+            model: cfg.oaModel,
+            messages:[{role:'system',content:cfg.persona||''},{role:'user',content:text}]
+          })
+        });
+        const data = await res.json();
+        bubble.textContent = data.choices[0].message.content.trim();
+      }catch(e){
+        bubble.textContent = "發話失敗，請檢查 API";
+      }
+    }
+
+    btnSave.addEventListener('click',()=>{
+      saveConfig();
+      bubble.textContent = "設定已儲存";
+    });
+
+    btnTest.addEventListener('click',()=>{
+      saveConfig();
+      speak("打聲招呼吧");
+    });
+
+    toggleBtn.addEventListener('click',()=>{
+      controls.classList.toggle('hidden');
+    });
+
+    chatSend.addEventListener('click',()=>{
+      const text = chatInput.value.trim();
+      if(text){
+        saveConfig();
+        speak(text);
+        chatInput.value = '';
+      }
+    });
+    chatInput.addEventListener('keydown',(e)=>{
+      if(e.key==='Enter'){
+        const text = chatInput.value.trim();
+        if(text){
+          saveConfig();
+          speak(text);
+          chatInput.value='';
+        }
+      }
+    });
+
+    loadConfig();
+
+    // === 註冊 service worker ===
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
